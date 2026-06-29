@@ -1,14 +1,13 @@
-use eframe::{egui, run_native, App, CreationContext, NativeOptions};
+use eframe::{App, CreationContext, NativeOptions, egui, run_native};
 use egui::{Color32, FontId, Pos2, Shape, Stroke, Vec2};
 use egui_graphs::{
-    DisplayEdge, DisplayNode, DrawContext, EdgeProps, FruchtermanReingoldWithCenterGravity,
-    FruchtermanReingoldWithCenterGravityState, Graph, GraphView, LayoutForceDirected, LayoutState,
-    Node, NodeProps, SettingsInteraction, SettingsNavigation, SettingsStyle,
+    DisplayEdge, DisplayNode, DrawContext, EdgeProps, FruchtermanReingoldWithCenterGravity, FruchtermanReingoldWithCenterGravityState,
+    Graph, GraphView, LayoutForceDirected, LayoutState, Node, NodeProps, SettingsInteraction, SettingsNavigation, SettingsStyle,
 };
 use petgraph::{
+    Directed, EdgeType,
     graph::IndexType,
     stable_graph::{EdgeIndex, NodeIndex, StableGraph},
-    Directed, EdgeType,
 };
 use rusqlite::Connection;
 use std::collections::{HashMap, HashSet, VecDeque, hash_map};
@@ -57,7 +56,11 @@ fn color_lerp(from: Color32, to: Color32, factor: f32) -> Color32 {
 }
 
 fn color_fade(level: f32, span: f32, bright: Color32, dim: Color32) -> Color32 {
-    let factor = if level <= 1.0 { 0.0 } else { (level - 1.0) / span };
+    let factor = if level <= 1.0 {
+        0.0
+    } else {
+        (level - 1.0) / span
+    };
     color_lerp(bright, dim, factor)
 }
 
@@ -185,15 +188,10 @@ impl From<EdgeProps<EdgeColor>> for ColoredEdgeShape {
     }
 }
 
-impl<N: Clone, Ty: EdgeType, Idx: IndexType, D: DisplayNode<N, EdgeColor, Ty, Idx>>
-    DisplayEdge<N, EdgeColor, Ty, Idx, D> for ColoredEdgeShape
+impl<N: Clone, Ty: EdgeType, Idx: IndexType, D: DisplayNode<N, EdgeColor, Ty, Idx>> DisplayEdge<N, EdgeColor, Ty, Idx, D>
+    for ColoredEdgeShape
 {
-    fn shapes(
-        &mut self,
-        start: &Node<N, EdgeColor, Ty, Idx, D>,
-        end: &Node<N, EdgeColor, Ty, Idx, D>,
-        ctx: &DrawContext,
-    ) -> Vec<Shape> {
+    fn shapes(&mut self, start: &Node<N, EdgeColor, Ty, Idx, D>, end: &Node<N, EdgeColor, Ty, Idx, D>, ctx: &DrawContext) -> Vec<Shape> {
         if is_hidden(self.color) || start.id() == end.id() {
             return vec![];
         }
@@ -273,7 +271,11 @@ struct SelectionInfo {
 
 impl SelectionInfo {
     fn positions_excluding_self(&self, depths: &HashMap<usize, usize>) -> Vec<usize> {
-        depths.keys().copied().filter(|&position| position != self.selected_position).collect()
+        depths
+            .keys()
+            .copied()
+            .filter(|&position| position != self.selected_position)
+            .collect()
     }
 
     fn ancestors(&self) -> Vec<usize> {
@@ -350,7 +352,7 @@ pub struct KernelGraphApp {
     finder_open: bool,
     finder_query: String,
     request: Option<NodeIndex>, // A node selection pending from a window/panel click, applied next frame.
-    layout_settling: bool, // Layout layout_settling: the force layout runs for a fixed number of steps.
+    layout_settling: bool,      // Layout layout_settling: the force layout runs for a fixed number of steps.
     fit_pending: bool,
 }
 
@@ -440,7 +442,13 @@ impl KernelGraphApp {
                 let (source_pos, target_pos) = (node_position[source.index()], node_position[target.index()]);
                 forward[source_pos].push(target_pos);
                 reverse[target_pos].push(source_pos);
-                edge_list.push((edge_index, Edge { source: source_pos, target: target_pos }));
+                edge_list.push((
+                    edge_index,
+                    Edge {
+                        source: source_pos,
+                        target: target_pos,
+                    },
+                ));
             }
         }
 
@@ -455,7 +463,9 @@ impl KernelGraphApp {
         }
         let mut cycle_edge_list: Vec<Edge> = cycle_edges.iter().copied().collect();
         cycle_edge_list.sort_by(|left, right| {
-            labels[left.source].cmp(&labels[right.source]).then_with(|| labels[left.target].cmp(&labels[right.target]))
+            labels[left.source]
+                .cmp(&labels[right.source])
+                .then_with(|| labels[left.target].cmp(&labels[right.target]))
         });
         let files_in_cycles = cycle_nodes.len();
 
@@ -538,24 +548,10 @@ impl KernelGraphApp {
                 for &(edge_index, _) in &self.edge_list {
                     edge_colors.push((edge_index, color_base_edge()));
                 }
-            }
+            },
             Some(selection) => {
-                let includer_span = (selection
-                    .includer_depth
-                    .values()
-                    .copied()
-                    .max()
-                    .unwrap_or(1)
-                    .saturating_sub(1))
-                .max(1) as f32;
-                let include_span = (selection
-                    .include_depth
-                    .values()
-                    .copied()
-                    .max()
-                    .unwrap_or(1)
-                    .saturating_sub(1))
-                .max(1) as f32;
+                let includer_span = (selection.includer_depth.values().copied().max().unwrap_or(1).saturating_sub(1)).max(1) as f32;
+                let include_span = (selection.include_depth.values().copied().max().unwrap_or(1).saturating_sub(1)).max(1) as f32;
 
                 for position in 0..self.node_count {
                     let color = if !selection.subgraph.contains(&position) {
@@ -580,14 +576,10 @@ impl KernelGraphApp {
                         HIDDEN
                     } else if self.cycle_edges.contains(&Edge { source, target }) {
                         CYCLE
-                    } else if selection.includer_depth.contains_key(&source)
-                        && selection.includer_depth.contains_key(&target)
-                    {
+                    } else if selection.includer_depth.contains_key(&source) && selection.includer_depth.contains_key(&target) {
                         let level = selection.includer_depth[&source].max(selection.includer_depth[&target]) as f32;
                         color_fade(level, includer_span, GREEN, GREEN_DIM)
-                    } else if selection.include_depth.contains_key(&source)
-                        && selection.include_depth.contains_key(&target)
-                    {
+                    } else if selection.include_depth.contains_key(&source) && selection.include_depth.contains_key(&target) {
                         let level = selection.include_depth[&source].max(selection.include_depth[&target]) as f32;
                         color_fade(level, include_span, YELLOW, YELLOW_DIM)
                     } else {
@@ -595,7 +587,7 @@ impl KernelGraphApp {
                     };
                     edge_colors.push((edge_index, color));
                 }
-            }
+            },
         }
 
         for (node_index, color) in node_colors {
@@ -690,11 +682,26 @@ impl KernelGraphApp {
         let selected = selection.selected_position;
         let cycle_members: Vec<usize> = selection.cycle_set.iter().copied().collect();
         vec![
-            InfoColumn { title: "Impact (includers)".to_string(), rows: make_rows(&selection.ancestors()) },
-            InfoColumn { title: "Direct includers".to_string(), rows: make_rows(&self.position_reverse[selected]) },
-            InfoColumn { title: "Direct includes".to_string(), rows: make_rows(&self.position_forward[selected]) },
-            InfoColumn { title: "Transitive includes".to_string(), rows: make_rows(&selection.descendants()) },
-            InfoColumn { title: "Cycle members".to_string(), rows: make_rows(&cycle_members) },
+            InfoColumn {
+                title: "Impact (includers)".to_string(),
+                rows: make_rows(&selection.ancestors()),
+            },
+            InfoColumn {
+                title: "Direct includers".to_string(),
+                rows: make_rows(&self.position_reverse[selected]),
+            },
+            InfoColumn {
+                title: "Direct includes".to_string(),
+                rows: make_rows(&self.position_forward[selected]),
+            },
+            InfoColumn {
+                title: "Transitive includes".to_string(),
+                rows: make_rows(&selection.descendants()),
+            },
+            InfoColumn {
+                title: "Cycle members".to_string(),
+                rows: make_rows(&cycle_members),
+            },
         ]
     }
 }
@@ -756,34 +763,29 @@ impl App for KernelGraphApp {
             });
         });
 
-        egui::Panel::left("Selection")
-            .resizable(true)
-            .show_inside(ui, |ui| {
-                egui::ScrollArea::vertical().show(ui, |ui| {
-                    let Some(selection) = &self.selection else {
-                        ui.label("Click a file to view its impact.");
-                        return;
-                    };
-                    ui.strong(format!("Selected: {}", self.position_labels[selection.selected_position]));
-                    ui.label(format!("Impact: {} file(s) recompile", selection.count_dependents()));
-                    ui.label(format!(
-                        "Direct includers: {}",
-                        self.position_in_degree[selection.selected_position]
-                    ));
-                    ui.label(format!(
-                        "Direct includes: {}",
-                        self.position_out_degree[selection.selected_position]
-                    ));
-                    ui.label(format!("Transitive includes: {}", selection.count_transitive_includes()));
-                    ui.label(format!("Include depth: {} level(s)", selection.max_includer_depth()));
-                    if !selection.cycle_set.is_empty() {
-                        ui.colored_label(
-                            CYCLE,
-                            format!("In include cycle ({} files)", selection.cycle_set.len()),
-                        );
-                    }
-                });
+        egui::Panel::left("Selection").resizable(true).show_inside(ui, |ui| {
+            egui::ScrollArea::vertical().show(ui, |ui| {
+                let Some(selection) = &self.selection else {
+                    ui.label("Click a file to view its impact.");
+                    return;
+                };
+                ui.strong(format!("Selected: {}", self.position_labels[selection.selected_position]));
+                ui.label(format!("Impact: {} file(s) recompile", selection.count_dependents()));
+                ui.label(format!(
+                    "Direct includers: {}",
+                    self.position_in_degree[selection.selected_position]
+                ));
+                ui.label(format!(
+                    "Direct includes: {}",
+                    self.position_out_degree[selection.selected_position]
+                ));
+                ui.label(format!("Transitive includes: {}", selection.count_transitive_includes()));
+                ui.label(format!("Include depth: {} level(s)", selection.max_includer_depth()));
+                if !selection.cycle_set.is_empty() {
+                    ui.colored_label(CYCLE, format!("In include cycle ({} files)", selection.cycle_set.len()));
+                }
             });
+        });
 
         // Graph view.
         egui::CentralPanel::default().show_inside(ui, |ui| {
@@ -812,9 +814,8 @@ impl App for KernelGraphApp {
             let running = state.base.is_running;
             state.save(ui, None);
 
-            let style = SettingsStyle::default()
-                .with_labels_always(true)
-                .with_node_stroke_hook(|selected, dragged, node_color, stroke, egui_style| {
+            let style = SettingsStyle::default().with_labels_always(true).with_node_stroke_hook(
+                |selected, dragged, node_color, stroke, egui_style| {
                     let mut s = stroke;
                     s.color = node_color.unwrap_or(egui_style.visuals.widgets.inactive.fg_stroke.color);
                     if selected {
@@ -825,7 +826,8 @@ impl App for KernelGraphApp {
                         s.color = Color32::LIGHT_BLUE;
                     }
                     s
-                });
+                },
+            );
             let nav = SettingsNavigation::default()
                 // The view is fit once when the layout settles (and on demand via `fit_pending`,
                 // e.g. the "Fit view" button); zoom/pan is disabled while the layout is running.
@@ -839,11 +841,20 @@ impl App for KernelGraphApp {
                 .with_node_selection_enabled(true)
                 .with_dragging_enabled(true);
 
-                ui.add(&mut GraphView::<_, _, _, _, IncludeNodeShape, ColoredEdgeShape, FruchtermanReingoldWithCenterGravityState, LayoutForceDirected<FruchtermanReingoldWithCenterGravity>>
-                    ::new(&mut self.g)
-                    .with_styles(&style)
-                    .with_navigations(&nav)
-                    .with_interactions(&interaction),
+            ui.add(
+                &mut GraphView::<
+                    _,
+                    _,
+                    _,
+                    _,
+                    IncludeNodeShape,
+                    ColoredEdgeShape,
+                    FruchtermanReingoldWithCenterGravityState,
+                    LayoutForceDirected<FruchtermanReingoldWithCenterGravity>,
+                >::new(&mut self.g)
+                .with_styles(&style)
+                .with_navigations(&nav)
+                .with_interactions(&interaction),
             );
 
             // Only keep animating while the layout is still being computed; once paused,
@@ -877,8 +888,7 @@ impl App for KernelGraphApp {
                                 false,
                                 format!(
                                     "Most included: {} ({} direct includers)",
-                                    self.position_labels[stats.most_included],
-                                    self.position_in_degree[stats.most_included]
+                                    self.position_labels[stats.most_included], self.position_in_degree[stats.most_included]
                                 ),
                             )
                             .clicked()
@@ -890,8 +900,7 @@ impl App for KernelGraphApp {
                                 false,
                                 format!(
                                     "Most includes: {} ({} direct includes)",
-                                    self.position_labels[stats.most_includes],
-                                    self.position_out_degree[stats.most_includes]
+                                    self.position_labels[stats.most_includes], self.position_out_degree[stats.most_includes]
                                 ),
                             )
                             .clicked()
@@ -921,15 +930,10 @@ impl App for KernelGraphApp {
                             ui.separator();
                             ui.colored_label(
                                 CYCLE,
-                                format!(
-                                    "Cycles: {} back-edge(s), {} files",
-                                    self.cycle_edges.len(),
-                                    stats.files_in_cycles
-                                ),
+                                format!("Cycles: {} back-edge(s), {} files", self.cycle_edges.len(), stats.files_in_cycles),
                             );
                             for &Edge { source, target } in &self.cycle_edge_list {
-                                let text =
-                                    format!("{} and {}", self.position_labels[source], self.position_labels[target]);
+                                let text = format!("{} and {}", self.position_labels[source], self.position_labels[target]);
                                 if ui.selectable_label(false, text).clicked() {
                                     clicked = Some(self.node_indices[source]);
                                 }
@@ -1006,9 +1010,7 @@ impl App for KernelGraphApp {
                 .resizable(true)
                 .default_width(460.0)
                 .show(&ctx, |ui| {
-                    let response = ui.add(
-                        egui::TextEdit::singleline(&mut query).hint_text("type a file name..."),
-                    );
+                    let response = ui.add(egui::TextEdit::singleline(&mut query).hint_text("type a file name..."));
                     response.request_focus();
                     let enter = ui.input(|i| i.key_pressed(egui::Key::Enter));
                     egui::ScrollArea::vertical().max_height(360.0).show(ui, |ui| {
@@ -1049,6 +1051,7 @@ fn bfs_depths(start: usize, adjacency: &[Vec<usize>]) -> HashMap<usize, usize> {
     depth
 }
 
+#[rustfmt::skip]
 const STANDARD_HEADERS: &[&str] = &[
     // C standard library (<xxx.h>).
     "assert.h", "complex.h", "ctype.h", "errno.h", "fenv.h", "float.h", "inttypes.h", "iso646.h",
@@ -1077,12 +1080,7 @@ fn is_standard_header(label: &str) -> bool {
     STANDARD_HEADERS.contains(&label)
 }
 
-fn top_ranking(
-    values: &[usize],
-    labels: &[String],
-    limit: usize,
-    exclude: impl Fn(&str) -> bool,
-) -> Vec<RankEntry> {
+fn top_ranking(values: &[usize], labels: &[String], limit: usize, exclude: impl Fn(&str) -> bool) -> Vec<RankEntry> {
     let mut ranked: Vec<RankEntry> = values
         .iter()
         .copied()
@@ -1091,7 +1089,10 @@ fn top_ranking(
         .map(|(position, count)| RankEntry { position, count })
         .collect();
     ranked.sort_by(|left, right| {
-        right.count.cmp(&left.count).then_with(|| labels[left.position].cmp(&labels[right.position]))
+        right
+            .count
+            .cmp(&left.count)
+            .then_with(|| labels[left.position].cmp(&labels[right.position]))
     });
     ranked.truncate(limit);
     ranked
@@ -1128,12 +1129,15 @@ fn find_cycle_edges(forward: &[Vec<usize>]) -> HashSet<Edge> {
                     State::Unvisited => {
                         state[neighbor] = State::OnStack;
                         work.push((neighbor, 0));
-                    }
+                    },
                     State::OnStack => {
                         // Neighbor is an ancestor on the current path. The edge closes a cycle.
-                        back_edges.insert(Edge { source: node, target: neighbor });
-                    }
-                    State::Done => {} // Forward or cross edge: not part of a cycle.
+                        back_edges.insert(Edge {
+                            source: node,
+                            target: neighbor,
+                        });
+                    },
+                    State::Done => {}, // Forward or cross edge: not part of a cycle.
                 }
             } else {
                 state[node] = State::Done;
@@ -1151,11 +1155,7 @@ fn generate_graph(filter_input: &str) -> Result<LoadedGraph, rusqlite::Error> {
     let mut id_map: HashMap<i32, NodeIndex> = HashMap::new();
     let mut nodes = Vec::new();
 
-    let filters: Vec<&str> = filter_input
-        .split(',')
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .collect();
+    let filters: Vec<&str> = filter_input.split(',').map(str::trim).filter(|s| !s.is_empty()).collect();
     if filters.is_empty() {
         return Ok(LoadedGraph { graph: g, nodes });
     }
@@ -1275,12 +1275,7 @@ mod tests {
 
     #[test]
     fn top_ranking_orders_by_count_then_label_and_drops_zeros() {
-        let labels = vec![
-            "a".to_string(),
-            "b".to_string(),
-            "c".to_string(),
-            "d".to_string(),
-        ];
+        let labels = vec!["a".to_string(), "b".to_string(), "c".to_string(), "d".to_string()];
         // Values: a = 5, b = 0 (dropped), c = 5 (same as a, label order wins), d = 9.
         let values = vec![5, 0, 5, 9];
         let ranked = top_ranking(&values, &labels, 10, |_| false);
@@ -1301,10 +1296,7 @@ mod tests {
         let ranked = top_ranking(&values, &labels, 2, |_| false);
         assert_eq!(
             ranked,
-            vec![
-                RankEntry { position: 2, count: 3 },
-                RankEntry { position: 1, count: 2 },
-            ]
+            vec![RankEntry { position: 2, count: 3 }, RankEntry { position: 1, count: 2 },]
         );
     }
 
