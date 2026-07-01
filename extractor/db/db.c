@@ -63,15 +63,39 @@ void db_close(void) {
     LOG_INFO("Transação comitada e banco fechado.");
 }
 
-int db_resolve_include_fallback(const char *filename) {
-    sqlite3_stmt *stmt;
-    const char *sql = "SELECT id FROM Files WHERE path LIKE '%/' || ? OR path = ? LIMIT 1;";
+// Build a LIKE pattern "%/<escaped>" where the LIKE wildcards '%', '_' and the
+// escape char '\' are escaped, so filenames containing '_' (e.g. my_string.h)
+// match literally instead of treating '_' as "any character".
+static char *build_suffix_like_pattern(const char *s) {
+    size_t len = strlen(s);
+    char *out = malloc(len * 2 + 3); // In the worst case every char is escaped, plus "%/" and NUL.
+    if (!out) return NULL;
+
+    char *p = out;
+    *p++ = '%';
+    *p++ = '/';
+    for (const char *c = s; *c; c++) {
+        if (*c == '\\' || *c == '%' || *c == '_') {
+            *p++ = '\\';
+        }
+        *p++ = *c;
+    }
+    *p = '\0';
+    return out;
+}
+
+int db_resolve_include_suffix(const char *include_path) {
+    DEFER_FREE char *pattern = build_suffix_like_pattern(include_path);
+    if (!pattern) return -1;
+
+    sqlite3_stmt *statement;
+    const char *sql = "SELECT id FROM Files WHERE path = ? OR path LIKE ? ESCAPE '\\' LIMIT 1;";
     int id = -1;
 
     if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) == SQLITE_OK) {
-        sqlite3_bind_text(stmt, 1, filename, -1, SQLITE_STATIC);
-        sqlite3_bind_text(stmt, 2, filename, -1, SQLITE_STATIC);
-        
+        sqlite3_bind_text(stmt, 1, include_path, -1, SQLITE_STATIC);
+        sqlite3_bind_text(stmt, 2, pattern, -1, SQLITE_STATIC);
+
         if (sqlite3_step(stmt) == SQLITE_ROW) {
             id = sqlite3_column_int(stmt, 0);
         }
