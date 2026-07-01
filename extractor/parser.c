@@ -60,7 +60,6 @@ void parse_file_for_includes(const char *filepath, int source_id) {
                     char full_path[PATH_MAX];
                     char resolved_path[PATH_MAX];
 
-
                     snprintf(full_path, sizeof(full_path), "%s/%s", dir, target_include);
 
                     if (realpath(full_path, resolved_path) != NULL) {
@@ -78,13 +77,11 @@ void parse_file_for_includes(const char *filepath, int source_id) {
 
                         const char *pure_filename = strrchr(target_include, '/');
                         pure_filename = pure_filename ? pure_filename + 1 : target_include;
-                        int target_id = db_resolve_include_fallback(pure_filename);
+                        int target_id = db_resolve_include_suffix(pure_filename);
                         
                         if (target_id != -1) {
-
                             db_insert_edge(source_id, target_id);
                         } else {
-
                             target_id = db_get_or_create_file_id(target_include);
                             db_insert_edge(source_id, target_id);
                         }

@@ -88,7 +88,7 @@ int db_resolve_include_suffix(const char *include_path) {
     DEFER_FREE char *pattern = build_suffix_like_pattern(include_path);
     if (!pattern) return -1;
 
-    sqlite3_stmt *statement;
+    sqlite3_stmt *stmt;
     const char *sql = "SELECT id FROM Files WHERE path = ? OR path LIKE ? ESCAPE '\\' LIMIT 1;";
     int id = -1;
 
